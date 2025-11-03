@@ -30,7 +30,7 @@ def extract_graph(token_seq):
     return graph_seq, adapt_seq
 
 def circ_sanity_check(cur_q_circ):
-    
+
     lr_sep_list = cur_q_circ[0::4]
     op_idx_list = cur_q_circ[1::4]
 
@@ -47,12 +47,52 @@ def circ_sanity_check(cur_q_circ):
     ):
         #print('wrong lr_sep_list')
         return False
-    
+
     if len(cur_q_circ) % 4:
         #print('Wrong length')
         return False
 
     return True
+
+
+def trim_incomplete_layer(circuit):
+    """
+    Remove incomplete layers from the end of a circuit.
+
+    A complete layer has 4 tokens: new_layer_p, operator_index, beta_coeff, gamma_coeff.
+    This function finds the last 'new_layer_p' token and checks if it has all 3 following tokens.
+    If not, it trims the circuit from that position.
+
+    Args:
+        circuit: List of tokens representing a quantum circuit
+
+    Returns:
+        Trimmed circuit with only complete layers
+    """
+    if not circuit:
+        return circuit
+
+    # Find the last occurrence of 'new_layer_p'
+    last_new_layer_idx = None
+    for i in range(len(circuit) - 1, -1, -1):
+        if circuit[i] == 'new_layer_p':
+            last_new_layer_idx = i
+            break
+
+    # If no 'new_layer_p' found, return the circuit as is
+    if last_new_layer_idx is None:
+        return circuit
+
+    # Check if there are exactly 3 tokens after the last 'new_layer_p'
+    # (operator_index, beta_coeff, gamma_coeff)
+    tokens_after = len(circuit) - last_new_layer_idx - 1
+
+    if tokens_after < 3:
+        # Incomplete layer: trim from the last 'new_layer_p'
+        return circuit[:last_new_layer_idx]
+    else:
+        # Complete layer: return the circuit as is
+        return circuit
 
 
 def generate_circ_from_df(
@@ -71,6 +111,7 @@ def generate_circ_from_df(
     token_seq_col = 'token_seq_round_d2',
     normalize_weights_flag = False,
     emb_dtype=torch.bfloat16,
+    trim_incomplete_layers = True, # remove incomplete layers from the end of circuits
 ):
     # Batched inference based on number of edges. 
     # We group graphs with the same number of edges together
@@ -197,7 +238,12 @@ def generate_circ_from_df(
                         cur_circ.append(tok)
                     if tok == 'eos':
                         break
-                cur_adapt_gpt_out_list[graph_idx]['q_circuits'].append(cur_circ[1:-1])
+                # Extract circuit (remove 'end_of_graph' at start and 'eos' at end)
+                circuit = cur_circ[1:-1]
+                # Apply incomplete layer trimming if requested
+                if trim_incomplete_layers:
+                    circuit = trim_incomplete_layer(circuit)
+                cur_adapt_gpt_out_list[graph_idx]['q_circuits'].append(circuit)
 
         ### flattening the circ list
         adapt_gpt_test_samples_list = []

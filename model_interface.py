@@ -113,7 +113,12 @@ class QAOA_GPT():
         # init from a model saved in a specific directory
         out_path = Path(model_fpath)
         checkpoint = torch.load(out_path, map_location=self.device)
-        gptconf = self.gptconfig(**checkpoint['model_args'])
+
+        # Add token metadata for constrained decoding
+        model_args = checkpoint['model_args']
+        model_args['token_meta'] = self.meta
+
+        gptconf = self.gptconfig(**model_args)
         model = self.gpt(gptconf)
         state_dict = checkpoint['model']
         unwanted_prefix = '_orig_mod.'
@@ -123,7 +128,7 @@ class QAOA_GPT():
         model.load_state_dict(state_dict)
         model.eval()
         model.to(self.device)
-        
+
         return model
     
     def generate_circ_from_nx(
@@ -135,6 +140,8 @@ class QAOA_GPT():
         max_new_tokens=150, # number of tokens generated in each sample
         temperature=0.1, # 1.0 = no change, < 1.0 = less random, > 1.0 = more random, in predictions
         top_k=200, # retain only the top_k most likely tokens, clamp others to have 0 probability
+        constrained_decoding=True, # enable grammar-based constrained decoding for hallucination-free generation
+        trim_incomplete_layers=True, # remove incomplete layers from the end of circuits
     ):
         graphs_nx_df, feather_par_emb, emb_graph_id_to_idx_dict = prepare_model_input(
             graphs_container,
@@ -146,7 +153,10 @@ class QAOA_GPT():
             emb_dtype = "float"
         else:
             emb_dtype = self.dtype
-            
+
+        # Set constrained decoding mode
+        self.model.set_constrained_decoding(constrained_decoding)
+
         gc_df = generate_circ_from_df(
             graphs_nx_df,
             graph_emb_np=feather_par_emb,
@@ -163,6 +173,7 @@ class QAOA_GPT():
             token_seq_col='token_seq_round_d2',
             normalize_weights_flag=False,
             emb_dtype=dtype_str_to_torch_dict[emb_dtype],
+            trim_incomplete_layers=trim_incomplete_layers,
         )
 
         return gc_df
