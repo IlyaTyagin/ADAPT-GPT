@@ -83,7 +83,22 @@ function eval_ansatz(
     
     # Iterate over the list in steps of 4
     for j in 1:4:length(generated_list)
-        push!(op_indices, generated_list[j+1]);
+        #push!(op_indices, generated_list[j+1]);
+        op_val = generated_list[j+1]
+    
+        # Convert to integer if it's a string like "op_5" or "7"
+        if isa(op_val, String)
+            # Extract digits if the string has a prefix like "op_5"
+            parsed_val = tryparse(Int, op_val)
+            if isnothing(parsed_val)
+                # remove non-digits and try again
+                digits_only = replace(op_val, r"\D+" => "")
+                parsed_val = tryparse(Int, digits_only)
+            end
+            push!(op_indices, parsed_val)
+        else
+            push!(op_indices, Int(op_val))
+        end
         push!(angle_values, generated_list[j+3]);
         push!(angle_values, generated_list[j+2]);
     end

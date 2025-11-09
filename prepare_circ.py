@@ -348,7 +348,9 @@ if skip_only_qaoa_circ:
 
 # Tokenization
 print("Tokenizing...")
+
 tokens_list = []
+token_to_token_type_dict = dict()
 
 ## Special symbols
 special_symbols_list = [
@@ -359,6 +361,8 @@ special_symbols_list = [
     'end_of_graph'
 ]
 tokens_list += special_symbols_list
+for tok in special_symbols_list:
+    token_to_token_type_dict[tok] = 'SPECIAL'
 
 ## Edges
 all_edges_list = []
@@ -369,6 +373,8 @@ all_edges_set = set(all_edges_list)
 
 print(f"\tTotal tokens for edges: {len(all_edges_set)}")
 tokens_list += list(all_edges_set)
+for tok in all_edges_set:
+    token_to_token_type_dict[tok] = 'EDGE'
 
 ## Coeffs
 
@@ -381,6 +387,8 @@ all_coefs_round_set = set(
 )
 len(all_coefs_round_set)
 tokens_list += list(all_coefs_round_set)
+for tok in all_coefs_round_set:
+    token_to_token_type_dict[tok] = 'NUM'
 
 print(f"\tTotal tokens for coefs: {len(all_coefs_round_set)}")
 
@@ -389,9 +397,12 @@ ops_list = []
 for l in combined_res_filt_df['op_list']:
     ops_list += l
 
-ops_list = list(set(ops_list))
+ops_set = set(ops_list)
+ops_list = [f"op_{op_int_idx}" for op_int_idx in ops_set]
 print(f"\tTotal tokens for operator pool: {len(ops_list)}")
 tokens_list += ops_list
+for tok in ops_list:
+    token_to_token_type_dict[tok] = 'OP'
 
 ## Tokenization
 int_idx_to_token_dict = dict(enumerate(tokens_list))
@@ -399,6 +410,8 @@ token_to_int_idx_dict = {v:k for k,v in int_idx_to_token_dict.items()}
 
 vocab_size = len(int_idx_to_token_dict)
 print(f"\tTotal tokens in vocab: {vocab_size}")
+
+assert vocab_size == len(token_to_token_type_dict)
 
 def julia_mod(a, b):
     result = a % b
@@ -418,7 +431,8 @@ def tokenize_row(row, coef_mod=True):
 
     for p in range(row['n_layers']):
         tokens_seq_list.append('new_layer_p')
-        tokens_seq_list.append(row['op_list'][p])
+        op_int_idx = row['op_list'][p]
+        tokens_seq_list.append(f"op_{op_int_idx}")
 
         cur_beta = row['β_coeff'][p]
         if coef_mod:
@@ -660,6 +674,7 @@ meta = {
     'test_data_graph_idx_list': test_data_graph_idx_list,
     'emb_graph_id_to_idx_dict': emb_graph_id_to_idx_dict,
     'emb_graph_idx_to_id_dict': emb_graph_idx_to_id_dict,
+    'token_to_token_type_dict': token_to_token_type_dict, # Addon from 11/08/25
 }
 
 pd.to_pickle(
